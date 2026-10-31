@@ -47,8 +47,8 @@ PERKS = [
 HOOKS_MORNING = ["Wake up to THIS view", "Your sea-view home in Albania", "Coffee with a sea view?", "Seaside living in Albania"]
 HOOKS_EVENING = ["Sunsets like this, every day", "Your own place by the sea", "Tonight's seaside pick", "Still renting your holidays?"]
 # Kevin MacLeod (incompetech.com) - Licensed under Creative Commons: By Attribution 4.0
-MUSIC = ["Carefree", "Life of Riley", "Wallpaper", "Fluffing a Duck", "Happy Alley", "Sneaky Snitch",
-         "Investigations", "Monkeys Spinning Monkeys", "Local Forecast - Elevator", "Pixel Peeker Polka - faster"]
+MUSIC = ["Pamgaea", "Funkorama", "Life of Riley", "Happy Alley", "Carefree", "Pixel Peeker Polka - faster",
+         "Monkeys Spinning Monkeys", "Fluffing a Duck", "Wallpaper", "Sneaky Snitch"]
 STOCK_QUERIES = ["mediterranean sea drone", "albania beach", "sea waves beach aerial", "sunset sea", "turquoise sea coast"]
 
 
@@ -233,20 +233,50 @@ def ff(args):
 
 
 ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", str(FPS), "-an"]
+# camera moves: (zoom expr, x expr, y expr) - stronger, alternating, "lively"
+MOVES = [
+    ("1+0.30*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),                 # punch zoom in
+    ("1.22", "(iw-iw/zoom)*on/{n}", "ih/2-(ih/zoom/2)"),                       # pan left -> right
+    ("1.30-0.30*on/{n}", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),              # zoom out
+    ("1.22", "(iw-iw/zoom)*(1-on/{n})", "ih/2-(ih/zoom/2)"),                   # pan right -> left
+    ("1+0.25*on/{n}", "iw/2-(iw/zoom/2)", "(ih-ih/zoom)*on/{n}"),              # zoom + tilt down
+]
+XFADES = ["slideleft", "zoomin", "slideup", "circleopen", "smoothleft", "fadewhite", "slideright", "radial"]
 
 
-def clip_from_image(img, ovl, dur, out, zoom_in=True):
+def clip_from_image(img, ovl, dur, out, move=0, st=0.15):
+    """Ken-Burns move + text overlay that slides up and fades in."""
     n = int(dur * FPS)
-    z = "min(1+0.0009*on,1.12)" if zoom_in else "max(1.12-0.0009*on,1)"
-    vf = ("[0:v]scale=%d:%d,zoompan=z='%s':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=%d:s=%dx%d:fps=%d[bg];"
-          "[bg][1:v]overlay=0:0,format=yuv420p" % (W * 2, H * 2, z, n, W, H, FPS))
-    ff(["-loop", "1", "-i", img, "-i", ovl, "-filter_complex", vf, "-t", str(dur)] + ENC + [out])
+    z, x, y = [e.format(n=n) for e in MOVES[move % len(MOVES)]]
+    vf = ("[0:v]scale=%d:%d,zoompan=z='%s':x='%s':y='%s':d=%d:s=%dx%d:fps=%d[bg];"
+          "[1:v]format=rgba,fade=t=in:st=%.2f:d=0.25:alpha=1[ov];"
+          "[bg][ov]overlay=x=0:y='if(lt(t,%.2f),(%.2f-t)*500,0)':shortest=1,format=yuv420p"
+          % (W * 2, H * 2, z, x, y, n, W, H, FPS, st, st + 0.3, st + 0.3))
+    ff(["-loop", "1", "-i", img, "-loop", "1", "-i", ovl, "-filter_complex", vf, "-t", str(dur)] + ENC + [out])
 
 
 def clip_from_video(src, ovl, dur, out):
-    vf = ("[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1,fps=%d[bg];"
-          "[bg][1:v]overlay=0:0,format=yuv420p" % (W, H, W, H, FPS))
-    ff(["-i", src, "-i", ovl, "-filter_complex", vf, "-t", str(dur)] + ENC + [out])
+    vf = ("[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1,fps=%d,"
+          "zoompan=z='1.15-0.15*on/%d':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=%dx%d:fps=%d[bg];"
+          "[1:v]format=rgba,fade=t=in:st=0:d=0.2:alpha=1[ov];"
+          "[bg][ov]overlay=x=0:y='if(lt(t,0.25),(0.25-t)*500,0)':shortest=1,format=yuv420p"
+          % (W, H, W, H, FPS, int(dur * FPS), W, H, FPS))
+    ff(["-i", src, "-loop", "1", "-i", ovl, "-filter_complex", vf, "-t", str(dur)] + ENC + [out])
+
+
+def join_with_transitions(clips, durs, out, td=0.35):
+    """chain clips with varied xfade transitions."""
+    args, fc = [], []
+    for c in clips:
+        args += ["-i", c]
+    prev, offset = "[0:v]", 0.0
+    for i in range(1, len(clips)):
+        offset += durs[i - 1] - td
+        tr = XFADES[(i - 1) % len(XFADES)]
+        lab = "[v%d]" % i
+        fc.append("%s[%d:v]xfade=transition=%s:duration=%.2f:offset=%.2f%s" % (prev, i, tr, td, offset, lab))
+        prev = lab
+    ff(args + ["-filter_complex", ";".join(fc), "-map", prev] + ENC + [out])
 
 
 def stock_clip(path):
@@ -304,10 +334,11 @@ def build_video(f_, hour):
     hook_png(WORK + "/hook.png", hook, f_["price"])
     sv = stock_clip(WORK + "/stock.mp4")
     if sv:
-        clip_from_video(sv, WORK + "/hook.png", 3, WORK + "/c0.mp4")
+        clip_from_video(sv, WORK + "/hook.png", 2.5, WORK + "/c0.mp4")
     else:
-        clip_from_image(photos[0], WORK + "/hook.png", 3, WORK + "/c0.mp4")
+        clip_from_image(photos[0], WORK + "/hook.png", 2.5, WORK + "/c0.mp4", move=0, st=0)
     clips.append(WORK + "/c0.mp4")
+    durs = [2.5]
 
     # 2) photos with info
     perks = random.sample(PERKS, 3)
@@ -325,26 +356,25 @@ def build_video(f_, hour):
         ov = "%s/o%d.png" % (WORK, i)
         overlay_png(ov, big, small or None)
         out = "%s/c%d.mp4" % (WORK, i + 1)
-        clip_from_image(fr, ov, 2.6, out, zoom_in=(i % 2 == 0))
+        clip_from_image(fr, ov, 1.9, out, move=i + 1)
         clips.append(out)
+        durs.append(1.9)
 
     # 3) end card
     end_png(WORK + "/end.jpg", f_)
     empty = WORK + "/empty.png"
     Image.new("RGBA", (W, H), (0, 0, 0, 0)).save(empty)
-    clip_from_image(WORK + "/end.jpg", empty, 3, WORK + "/cend.mp4")
+    clip_from_image(WORK + "/end.jpg", empty, 2.8, WORK + "/cend.mp4", move=0)
     clips.append(WORK + "/cend.mp4")
+    durs.append(2.8)
 
-    with open(WORK + "/list.txt", "w") as fh:
-        for c in clips:
-            fh.write("file '%s'\n" % os.path.basename(c))
-    ff(["-f", "concat", "-safe", "0", "-i", WORK + "/list.txt", "-c", "copy", WORK + "/video.mp4"])
+    join_with_transitions(clips, durs, WORK + "/video.mp4")
 
     dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", WORK + "/video.mp4"]).strip())
     track = music(WORK + "/music.mp3")
     if track:
-        ff(["-i", WORK + "/video.mp4", "-stream_loop", "-1", "-i", WORK + "/music.mp3",
-            "-filter_complex", "[1:a]volume=0.8,afade=t=in:d=0.5,afade=t=out:st=%.2f:d=1.5[a]" % (dur - 1.5),
+        ff(["-i", WORK + "/video.mp4", "-ss", "1.5", "-stream_loop", "-1", "-i", WORK + "/music.mp3",
+            "-filter_complex", "[1:a]volume=0.9,afade=t=in:d=0.2,afade=t=out:st=%.2f:d=1.5[a]" % (dur - 1.5),
             "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", "%.2f" % dur,
             "-movflags", "+faststart", "final.mp4"])
     else:
