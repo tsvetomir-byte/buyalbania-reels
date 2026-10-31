@@ -44,7 +44,7 @@ PERKS = [
     "Warm, welcoming people",
     "Amazing fresh food & seafood",
 ]
-HOOKS_MORNING = ["Wake up to THIS view", "Your sea-view home in Albania", "Coffee with a sea view?", "Seaside living from"]
+HOOKS_MORNING = ["Wake up to THIS view", "Your sea-view home in Albania", "Coffee with a sea view?", "Seaside living in Albania"]
 HOOKS_EVENING = ["Sunsets like this, every day", "Your own place by the sea", "Tonight's seaside pick", "Still renting your holidays?"]
 # Kevin MacLeod (incompetech.com) - Licensed under Creative Commons: By Attribution 4.0
 MUSIC = ["Carefree", "Life of Riley", "Wallpaper", "Fluffing a Duck", "Happy Alley", "Sneaky Snitch",
@@ -360,7 +360,7 @@ def caption(f_, hook, track):
     t = "#" + re.sub(r"[^a-z0-9]", "", f_["town"].lower())
     if t not in tags:
         tags.insert(0, t)
-    lines = ["🌊 " + hook + "!", "", "🏡 " + f_["title"]]
+    lines = ["🌊 " + hook + ("" if hook[-1] in "?!" else "!"), "", "🏡 " + f_["title"]]
     if f_["price"]:
         lines.append("💶 Price: " + f_["price"] + " EUR")
     if f_["area"]:
