@@ -10,7 +10,8 @@ Every run (9:00 and 18:00 Europe/Prague):
 Secrets (GitHub -> Settings -> Secrets and variables -> Actions):
   IG_TOKEN    - Facebook page access token (never expires)
   IG_USER_ID  - Instagram business account id
-  PEXELS_KEY  - free API key from pexels.com/api (optional, without it the hook uses the 1st photo)
+  PIXABAY_KEY - free API key from pixabay.com/api/docs (stock sea/drone/food clips; optional)
+  PEXELS_KEY  - alternative free key from pexels.com/api (optional)
 """
 import html as htmlmod
 import json
@@ -50,6 +51,8 @@ HOOKS_EVENING = ["Sunsets like this, every day", "Your own place by the sea", "T
 MUSIC = ["Pamgaea", "Funkorama", "Life of Riley", "Happy Alley", "Carefree", "Pixel Peeker Polka - faster",
          "Monkeys Spinning Monkeys", "Fluffing a Duck", "Wallpaper", "Sneaky Snitch"]
 STOCK_QUERIES = ["mediterranean sea drone", "albania beach", "sea waves beach aerial", "sunset sea", "turquoise sea coast"]
+STOCK_MID = ["mediterranean food", "lemon tree", "beach walk sunset", "seafood restaurant", "old town mediterranean", "drone coastline"]
+STOCK_END = ["sunset beach", "sea drone", "couple beach sunset", "beach waves slow motion"]
 
 
 def log(*a):
@@ -279,25 +282,43 @@ def join_with_transitions(clips, durs, out, td=0.35):
     ff(args + ["-filter_complex", ";".join(fc), "-map", prev] + ENC + [out])
 
 
-def stock_clip(path):
-    key = os.environ.get("PEXELS_KEY")
-    if not key:
-        return None
+_USED_STOCK = set()
+
+
+def stock_clip(path, query=None):
+    """free stock video (Pixabay, or Pexels if a key exists): sea, drone, beach, food..."""
+    q = query or random.choice(STOCK_QUERIES)
+    pix, pex = os.environ.get("PIXABAY_KEY"), os.environ.get("PEXELS_KEY")
     try:
-        q = random.choice(STOCK_QUERIES)
-        r = requests.get("https://api.pexels.com/videos/search", params={"query": q, "orientation": "portrait", "per_page": 15},
-                         headers={"Authorization": key}, timeout=30).json()
-        vids = [v for v in r.get("videos", []) if v.get("duration", 0) >= 4]
-        random.shuffle(vids)
-        for v in vids:
-            files = sorted([f for f in v["video_files"] if f.get("width") and 700 <= f["width"] <= 1440 and f["height"] > f["width"]],
-                           key=lambda f: f["width"])
-            if files:
-                open(path, "wb").write(get(files[-1]["link"]).content)
-                log("stock clip:", q, v.get("url"))
-                return path
+        if pix:
+            r = requests.get("https://pixabay.com/api/videos/", params={"key": pix, "q": q, "per_page": 50, "safesearch": "true"},
+                             timeout=30).json()
+            hits = [h for h in r.get("hits", []) if h.get("duration", 0) >= 4 and h["id"] not in _USED_STOCK]
+            random.shuffle(hits)
+            for h in hits:
+                v = h.get("videos", {})
+                f = v.get("medium") or v.get("large") or v.get("small")
+                if f and f.get("url"):
+                    open(path, "wb").write(get(f["url"]).content)
+                    _USED_STOCK.add(h["id"])
+                    log("stock clip (pixabay):", q, h.get("pageURL"))
+                    return path
+        if pex:
+            r = requests.get("https://api.pexels.com/videos/search",
+                             params={"query": q, "orientation": "portrait", "per_page": 30, "page": random.randint(1, 3)},
+                             headers={"Authorization": pex}, timeout=30).json()
+            vids = [v for v in r.get("videos", []) if v.get("duration", 0) >= 4 and v["id"] not in _USED_STOCK]
+            random.shuffle(vids)
+            for v in vids:
+                files = sorted([f for f in v["video_files"] if f.get("width") and 700 <= f["width"] <= 1440 and f["height"] > f["width"]],
+                               key=lambda f: f["width"])
+                if files:
+                    open(path, "wb").write(get(files[-1]["link"]).content)
+                    _USED_STOCK.add(v["id"])
+                    log("stock clip (pexels):", q, v.get("url"))
+                    return path
     except Exception as e:
-        log("Pexels failed:", e)
+        log("stock video failed:", e)
     return None
 
 
@@ -359,8 +380,25 @@ def build_video(f_, hour):
         clip_from_image(fr, ov, 1.9, out, move=i + 1)
         clips.append(out)
         durs.append(1.9)
+        if i == 2:  # free stock B-roll in the middle (food, citrus, beach life)
+            ovm = "%s/om.png" % WORK
+            overlay_png(ovm, perks[1], "Life in Albania")
+            sm = stock_clip(WORK + "/stock_mid.mp4", random.choice(STOCK_MID))
+            if sm:
+                clip_from_video(sm, ovm, 2.2, WORK + "/cmid.mp4")
+                clips.append(WORK + "/cmid.mp4")
+                durs.append(2.2)
 
-    # 3) end card
+    # 3) stock B-roll with CTA before the end card
+    ove = WORK + "/oe.png"
+    overlay_png(ove, "DM us today", "Find it on BuyAlbania.eu – ID " + f_["id"])
+    se = stock_clip(WORK + "/stock_end.mp4", random.choice(STOCK_END))
+    if se:
+        clip_from_video(se, ove, 2.2, WORK + "/cse.mp4")
+        clips.append(WORK + "/cse.mp4")
+        durs.append(2.2)
+
+    # 4) end card
     end_png(WORK + "/end.jpg", f_)
     empty = WORK + "/empty.png"
     Image.new("RGBA", (W, H), (0, 0, 0, 0)).save(empty)
