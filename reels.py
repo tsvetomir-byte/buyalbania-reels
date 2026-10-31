@@ -380,10 +380,10 @@ def build_video(f_, hour):
         clip_from_image(fr, ov, 1.9, out, move=i + 1)
         clips.append(out)
         durs.append(1.9)
-        if i == 2:  # free stock B-roll in the middle (food, citrus, beach life)
+        if i == min(2, len(photos[:7]) - 1):  # free stock B-roll in the middle (food, citrus, beach life)
             ovm = "%s/om.png" % WORK
             overlay_png(ovm, perks[1], "Life in Albania")
-            sm = stock_clip(WORK + "/stock_mid.mp4", random.choice(STOCK_MID))
+            sm = stock_clip(WORK + "/stock_mid.mp4", random.choice(STOCK_MID)) or stock_clip(WORK + "/stock_mid.mp4")
             if sm:
                 clip_from_video(sm, ovm, 2.2, WORK + "/cmid.mp4")
                 clips.append(WORK + "/cmid.mp4")
