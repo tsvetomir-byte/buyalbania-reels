@@ -38,6 +38,7 @@ jobs:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
           DRY_RUN: ${{ github.event.inputs.dry_run || '0' }}
           FORCE: ${{ github.event.inputs.force || '0' }}
         run: python reels.py
