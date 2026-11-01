@@ -448,34 +448,68 @@ def caption(f_, hook, track):
 
 
 # ---------------------------------------------------------------- instagram
+def _host_video(path):
+    """public link as a GitHub release asset (this repo is public) so Instagram downloads the video itself."""
+    gh, repo = os.environ.get("GH_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
+    if not gh or not repo:
+        raise RuntimeError("GH_TOKEN / GITHUB_REPOSITORY missing")
+    h = {"Authorization": "Bearer " + gh, "Accept": "application/vnd.github+json"}
+    api = "https://api.github.com/repos/" + repo
+    rel = requests.get(api + "/releases/tags/videos", headers=h, timeout=30)
+    if rel.status_code == 404:
+        rel = requests.post(api + "/releases", headers=h, timeout=30,
+                            json={"tag_name": "videos", "name": "Reel videos", "body": "Videos for the Instagram Reels autopilot"})
+    rel.raise_for_status()
+    rel = rel.json()
+    for a in sorted(rel.get("assets", []), key=lambda a: a["created_at"])[:-9]:  # keep only the newest videos
+        requests.delete("%s/releases/assets/%d" % (api, a["id"]), headers=h, timeout=30)
+    name = "reel-%s.mp4" % datetime.now(ZoneInfo("UTC")).strftime("%Y%m%d-%H%M%S")
+    with open(path, "rb") as fh:
+        up = requests.post("https://uploads.github.com/repos/%s/releases/%d/assets" % (repo, rel["id"]), params={"name": name},
+                           headers=dict(h, **{"Content-Type": "video/mp4"}), data=fh, timeout=300)
+    if up.status_code not in (200, 201):
+        raise RuntimeError("video hosting failed: %s %s" % (up.status_code, up.text[:200]))
+    url = up.json()["browser_download_url"]
+    log("video url:", url)
+    return url
+
 def publish_reel(path, cap):
-    """upload + publish with up to 3 attempts (a fresh container each time)."""
+    """publish with up to 3 attempts: video_url (Instagram downloads it) first, resumable upload as fallback."""
     tok, ig = os.environ["IG_TOKEN"], os.environ["IG_USER_ID"]
     data = open(path, "rb").read()
-    last = None
+    last, url = None, None
     for attempt in range(1, 4):
         try:
-            return _publish_once(tok, ig, data, cap)
+            if not url:
+                try:
+                    url = _host_video(path)
+                except Exception as e:
+                    log("hosting failed, using direct upload:", e)
+            return _publish_once(tok, ig, data, cap, url)
         except Exception as e:
             last = e
             log("attempt %d failed: %s" % (attempt, e))
             time.sleep(30 * attempt)
     raise RuntimeError("all upload attempts failed: %s" % last)
 
-def _publish_once(tok, ig, data, cap):
-    r = requests.post("%s/%s/media" % (GRAPH, ig), data={
-        "media_type": "REELS", "upload_type": "resumable", "caption": cap,
-        "share_to_feed": "true", "thumb_offset": "3500", "access_token": tok}, timeout=60).json()
+def _publish_once(tok, ig, data, cap, video_url=None):
+    params = {"media_type": "REELS", "caption": cap, "share_to_feed": "true", "thumb_offset": "3500", "access_token": tok}
+    if video_url:
+        params["video_url"] = video_url
+    else:
+        params["upload_type"] = "resumable"
+    r = requests.post("%s/%s/media" % (GRAPH, ig), data=params, timeout=60).json()
     if "id" not in r:
         raise RuntimeError("container error: %s" % r)
     cid = r["id"]
-    up = requests.post("https://rupload.facebook.com/ig-api-upload/v26.0/%s" % cid,
-                       headers={"Authorization": "OAuth " + tok, "offset": "0", "file_size": str(len(data)),
-                                "Content-Type": "application/octet-stream"},
-                       data=data, timeout=300)
-    log("upload:", up.status_code, up.text[:200])
-    if up.status_code != 200:
-        raise RuntimeError("upload failed: %s %s" % (up.status_code, up.text[:300]))
+    if not video_url:
+        up = requests.post("https://rupload.facebook.com/ig-api-upload/v26.0/%s" % cid,
+                           headers={"Authorization": "OAuth " + tok, "offset": "0", "file_size": str(len(data)),
+                                    "Content-Type": "application/octet-stream"},
+                           data=data, timeout=300)
+        log("upload:", up.status_code, up.text[:200])
+        if up.status_code != 200:
+            raise RuntimeError("upload failed: %s %s" % (up.status_code, up.text[:300]))
     for _ in range(60):
         s = requests.get("%s/%s" % (GRAPH, cid), params={"fields": "status_code,status", "access_token": tok}, timeout=30).json()
         log("status:", s.get("status_code"), s.get("status", ""))
@@ -484,6 +518,7 @@ def _publish_once(tok, ig, data, cap):
         if s.get("status_code") in ("ERROR", "EXPIRED"):
             raise RuntimeError("processing failed: %s" % s)
         time.sleep(10)
+    p = {}
     for _ in range(5):
         p = requests.post("%s/%s/media_publish" % (GRAPH, ig), data={"creation_id": cid, "access_token": tok}, timeout=60).json()
         if "id" in p:
