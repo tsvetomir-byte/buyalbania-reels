@@ -244,6 +244,10 @@ MOVES = [
     ("1.22", "(iw-iw/zoom)*(1-on/{n})", "ih/2-(ih/zoom/2)"),                   # pan right -> left
     ("1+0.25*on/{n}", "iw/2-(iw/zoom/2)", "(ih-ih/zoom)*on/{n}"),              # zoom + tilt down
 ]
+# final encode exactly to Instagram Reels specs (H.264 High 4.1, CFR 30 fps, closed 2 s GOP, AAC 48 kHz)
+IG_ENC = ["-c:v", "libx264", "-preset", "medium", "-profile:v", "high", "-level:v", "4.1", "-pix_fmt", "yuv420p",
+          "-r", "30", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M",
+          "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k", "-movflags", "+faststart"]
 XFADES = ["slideleft", "zoomin", "slideup", "circleopen", "smoothleft", "fadewhite", "slideright", "radial"]
 
 
@@ -413,10 +417,10 @@ def build_video(f_, hour):
     if track:
         ff(["-i", WORK + "/video.mp4", "-ss", "1.5", "-stream_loop", "-1", "-i", WORK + "/music.mp3",
             "-filter_complex", "[1:a]volume=0.9,afade=t=in:d=0.2,afade=t=out:st=%.2f:d=1.5[a]" % (dur - 1.5),
-            "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", "%.2f" % dur,
+            "-map", "0:v", "-map", "[a]"] + IG_ENC + ["-t", "%.2f" % dur,
             "-movflags", "+faststart", "final.mp4"])
     else:
-        ff(["-i", WORK + "/video.mp4", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-c:v", "copy", "-c:a", "aac",
+        ff(["-i", WORK + "/video.mp4", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"] + IG_ENC + [
             "-shortest", "-movflags", "+faststart", "final.mp4"])
     return "final.mp4", track, hook
 
@@ -445,32 +449,48 @@ def caption(f_, hook, track):
 
 # ---------------------------------------------------------------- instagram
 def publish_reel(path, cap):
+    """upload + publish with up to 3 attempts (a fresh container each time)."""
     tok, ig = os.environ["IG_TOKEN"], os.environ["IG_USER_ID"]
+    data = open(path, "rb").read()
+    last = None
+    for attempt in range(1, 4):
+        try:
+            return _publish_once(tok, ig, data, cap)
+        except Exception as e:
+            last = e
+            log("attempt %d failed: %s" % (attempt, e))
+            time.sleep(30 * attempt)
+    raise RuntimeError("all upload attempts failed: %s" % last)
+
+def _publish_once(tok, ig, data, cap):
     r = requests.post("%s/%s/media" % (GRAPH, ig), data={
         "media_type": "REELS", "upload_type": "resumable", "caption": cap,
         "share_to_feed": "true", "thumb_offset": "3500", "access_token": tok}, timeout=60).json()
     if "id" not in r:
         raise RuntimeError("container error: %s" % r)
     cid = r["id"]
-    size = os.path.getsize(path)
     up = requests.post("https://rupload.facebook.com/ig-api-upload/v26.0/%s" % cid,
-                       headers={"Authorization": "OAuth " + tok, "offset": "0", "file_size": str(size)},
-                       data=open(path, "rb"), timeout=300)
+                       headers={"Authorization": "OAuth " + tok, "offset": "0", "file_size": str(len(data)),
+                                "Content-Type": "application/octet-stream"},
+                       data=data, timeout=300)
     log("upload:", up.status_code, up.text[:200])
-    up.raise_for_status()
+    if up.status_code != 200:
+        raise RuntimeError("upload failed: %s %s" % (up.status_code, up.text[:300]))
     for _ in range(60):
         s = requests.get("%s/%s" % (GRAPH, cid), params={"fields": "status_code,status", "access_token": tok}, timeout=30).json()
-        log("status:", s.get("status_code"))
+        log("status:", s.get("status_code"), s.get("status", ""))
         if s.get("status_code") == "FINISHED":
             break
         if s.get("status_code") in ("ERROR", "EXPIRED"):
             raise RuntimeError("processing failed: %s" % s)
         time.sleep(10)
-    p = requests.post("%s/%s/media_publish" % (GRAPH, ig), data={"creation_id": cid, "access_token": tok}, timeout=60).json()
-    if "id" not in p:
-        raise RuntimeError("publish error: %s" % p)
-    return p["id"]
-
+    for _ in range(5):
+        p = requests.post("%s/%s/media_publish" % (GRAPH, ig), data={"creation_id": cid, "access_token": tok}, timeout=60).json()
+        if "id" in p:
+            return p["id"]
+        log("publish not ready:", p)
+        time.sleep(15)
+    raise RuntimeError("publish error: %s" % p)
 
 # ---------------------------------------------------------------- main
 def main():
