@@ -1,0 +1,82 @@
+name: Reels Studio
+
+on:
+  workflow_dispatch:
+    inputs:
+      property:
+        description: "Property ID or URL from buyalbania.eu (empty = newest not posted)"
+        default: ""
+      length:
+        description: "Length in seconds (15-35)"
+        default: "28"
+      style:
+        description: "Music style"
+        type: choice
+        default: auto
+        options: [auto, deep_house, melodic_house, lounge, cinematic, med_chill]
+      language:
+        description: "Language"
+        type: choice
+        default: cs
+        options: [cs, en, sk]
+      variant:
+        description: "Hook"
+        type: choice
+        default: all
+        options: [all, viral, luxury, sales]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: studio
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q requests pillow librosa
+          mkdir -p fonts
+          curl -sL -o fonts/Poppins-Medium.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Medium.ttf
+          curl -sL -o fonts/Poppins-Bold.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf
+          curl -sL -o fonts/PlayfairDisplay.ttf "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf"
+      - name: Create the Reel
+        env:
+          PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
+          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          PROPERTY: ${{ github.event.inputs.property }}
+          LENGTH: ${{ github.event.inputs.length }}
+          STYLE: ${{ github.event.inputs.style }}
+          LANG_REEL: ${{ github.event.inputs.language }}
+          VARIANT: ${{ github.event.inputs.variant }}
+        run: python studio.py
+      - name: Keep the files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reel-studio
+          path: out
+          retention-days: 30
+      - name: Save to the studio-output branch (newest 10)
+        run: |
+          mkdir -p /tmp/o && cp -r out/* /tmp/o/
+          git config user.name "reels-studio"
+          git config user.email "reels-studio@users.noreply.github.com"
+          if git fetch --depth 1 origin studio-output; then
+            git checkout -f -B studio-output FETCH_HEAD
+          else
+            git checkout --orphan studio-output
+            git rm -rfq .
+          fi
+          git clean -fdxq
+          cp -r /tmp/o/* .
+          ls -d */ | sed 's/.*-\([0-9]*-[0-9]*\)\/$/\1 &/' | sort | head -n -10 | cut -d' ' -f2 | xargs -r rm -rf
+          git add -A
+          git commit -qm "Studio output"
+          git push -f origin "$(git commit-tree 'HEAD^{tree}' -m 'Studio output'):refs/heads/studio-output"
