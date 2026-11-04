@@ -48,10 +48,10 @@ PERKS = [
 HOOKS_MORNING = ["Wake up to THIS view", "Your sea-view home in Albania", "Coffee with a sea view?", "Seaside living in Albania"]
 HOOKS_EVENING = ["Sunsets like this, every day", "Your own place by the sea", "Tonight's seaside pick", "Still renting your holidays?"]
 # Kevin MacLeod (incompetech.com) - Licensed under Creative Commons: By Attribution 4.0
-MUSIC = ["Pamgaea", "Funkorama", "Life of Riley", "Happy Alley", "Carefree", "Pixel Peeker Polka - faster",
-         "Monkeys Spinning Monkeys", "Fluffing a Duck", "Wallpaper", "Sneaky Snitch"]
-STOCK_QUERIES = ["mediterranean sea drone", "albania beach", "sea waves beach aerial", "sunset sea", "turquoise sea coast"]
-STOCK_MID = ["mediterranean food", "lemon tree", "beach walk sunset", "seafood restaurant", "old town mediterranean", "drone coastline"]
+MUSIC = ["Inspired", "Wholesome", "Cool Vibes", "Bossa Antigua", "Airport Lounge", "Backbay Lounge",
+         "Easy Lemon", "Feelin Good", "Fresh Air", "Beachfront Celebration"]
+STOCK_QUERIES = ["albania beach", "mediterranean beach aerial", "turquoise sea beach", "sea waves beach aerial", "sandy beach drone"]
+STOCK_MID = ["beach walk sunset", "turquoise sea beach", "beach waves slow motion", "drone coastline", "mediterranean beach aerial", "sandy beach drone"]
 STOCK_END = ["sunset beach", "sea drone", "couple beach sunset", "beach waves slow motion"]
 
 
@@ -366,7 +366,7 @@ def build_video(f_, hour):
     durs = [2.5]
 
     # 2) photos with info
-    perks = random.sample(PERKS, 3)
+    perks = random.sample(PERKS, 6)
     infos = [
         ("€ " + f_["price"] if f_["price"] else "Seaside home", f_["town"] + ", Albania"),
         ((f_["sea"] + " to the sea") if f_["sea"] else "Close to the beach", (f_["area"] + " m²") if f_["area"] else ""),
@@ -376,7 +376,7 @@ def build_video(f_, hour):
         ("Legal help & instalments", "Czech company you can trust"),
         ("DM us today", "BuyAlbania.eu – ID " + f_["id"]),
     ]
-    for i, fr in enumerate(photos[:7]):
+    for i, fr in enumerate(photos[:6]):
         big, small = infos[i % len(infos)]
         ov = "%s/o%d.png" % (WORK, i)
         overlay_png(ov, big, small or None)
@@ -384,13 +384,15 @@ def build_video(f_, hour):
         clip_from_image(fr, ov, 1.9, out, move=i + 1)
         clips.append(out)
         durs.append(1.9)
-        if i == min(2, len(photos[:7]) - 1):  # free stock B-roll in the middle (food, citrus, beach life)
-            ovm = "%s/om.png" % WORK
-            overlay_png(ovm, perks[1], "Life in Albania")
-            sm = stock_clip(WORK + "/stock_mid.mp4", random.choice(STOCK_MID)) or stock_clip(WORK + "/stock_mid.mp4")
+        if i % 2 == 1:  # free beach video after every 2nd photo
+            ovm = "%s/om%d.png" % (WORK, i)
+            overlay_png(ovm, perks[3 + i // 2], "Life in Albania")
+            sf = "%s/stock_mid%d.mp4" % (WORK, i)
+            cm = "%s/cmid%d.mp4" % (WORK, i)
+            sm = stock_clip(sf, random.choice(STOCK_MID)) or stock_clip(sf)
             if sm:
-                clip_from_video(sm, ovm, 2.2, WORK + "/cmid.mp4")
-                clips.append(WORK + "/cmid.mp4")
+                clip_from_video(sm, ovm, 2.2, cm)
+                clips.append(cm)
                 durs.append(2.2)
 
     # 3) stock B-roll with CTA before the end card
