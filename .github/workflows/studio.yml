@@ -43,6 +43,8 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           pip install -q requests pillow librosa
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q transformers
           mkdir -p fonts
           curl -sL -o fonts/Poppins-Medium.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Medium.ttf
           curl -sL -o fonts/Poppins-Bold.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf
