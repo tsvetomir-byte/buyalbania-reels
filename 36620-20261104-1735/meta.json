@@ -1,0 +1,106 @@
+{
+ "property": {
+  "id": "36620",
+  "title": "Prostorný byt 5+kk, 175 m², 6. patro s výtahem, Drač (Durrës), Albánie",
+  "price": "256 000 €",
+  "area": "",
+  "layout": "5+kk",
+  "sea": "",
+  "town": "Durres",
+  "url": "https://www.buyalbania.eu/cs/nemovitosti/detail/prostorny-byt-5-kk-175-m-2-6-patro-s-vytahem-drac-durres-albanie/36620"
+ },
+ "language": "cs",
+ "length": 28,
+ "variants": {
+  "viral": {
+   "hook": "Tipnete si cenu?",
+   "video": "reel_viral.mp4",
+   "cover": "cover_viral.jpg",
+   "seconds": 28.6
+  },
+  "luxury": {
+   "hook": "Tohle není dovolená. Tohle může být váš domov.",
+   "video": "reel_luxury.mp4",
+   "cover": "cover_luxury.jpg",
+   "seconds": 28.6
+  },
+  "sales": {
+   "hook": "Takto vypadá 256 000 € v Albánii.",
+   "video": "reel_sales.mp4",
+   "cover": "cover_sales.jpg",
+   "seconds": 28.6
+  }
+ },
+ "recommended_hook": "viral",
+ "all_hooks": {
+  "viral": "Tipnete si cenu?",
+  "luxury": "Tohle není dovolená. Tohle může být váš domov.",
+  "sales": "Takto vypadá 256 000 € v Albánii."
+ },
+ "music": {
+  "id": 129,
+  "title": "House Vibes",
+  "artist": "Alejandro Magana",
+  "source": "Mixkit (mixkit.co)",
+  "url": "https://assets.mixkit.co/music/129/129.mp3",
+  "license": "Mixkit Stock Music Free License (https://mixkit.co/license/)",
+  "bpm": 117,
+  "style": "deep_house"
+ },
+ "stock_video": [
+  {
+   "source": "https://pixabay.com/videos/id-304084/",
+   "license": "Pixabay Content License"
+  },
+  {
+   "source": "https://pixabay.com/videos/id-335729/",
+   "license": "Pixabay Content License"
+  },
+  {
+   "source": "https://pixabay.com/videos/id-112137/",
+   "license": "Pixabay Content License"
+  }
+ ],
+ "quality": {
+  "passed": true,
+  "checks": [
+   {
+    "check": "délka viral",
+    "ok": true,
+    "value": 28.6
+   },
+   {
+    "check": "hook viral nejvýše 10 slov",
+    "ok": true,
+    "value": "Tipnete si cenu?"
+   },
+   {
+    "check": "délka luxury",
+    "ok": true,
+    "value": 28.6
+   },
+   {
+    "check": "hook luxury nejvýše 10 slov",
+    "ok": true,
+    "value": "Tohle není dovolená. Tohle může být váš domov."
+   },
+   {
+    "check": "délka sales",
+    "ok": true,
+    "value": 28.6
+   },
+   {
+    "check": "hook sales nejvýše 10 slov",
+    "ok": true,
+    "value": "Takto vypadá 256 000 € v Albánii."
+   }
+  ],
+  "warnings": [
+   "Plocha v titulku (175 m²) a v parametrech (252 m²) nesouhlasí - plocha se ve videu nezobrazí.",
+   "Jen 6 fotek, některé se opakují."
+  ]
+ },
+ "cost_czk": 0,
+ "created": "20261104-1735",
+ "published": false
+}
