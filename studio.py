@@ -149,7 +149,7 @@ def load_property(ref, lang):
     base = "https://buyalbania.fra1.cdn.digitaloceanspaces.com/%s/%%s_w%%d.webp" % pid
     return {"id": pid, "title": title, "price": price, "area": area, "sea": f["sea"], "layout": layout.group(1) if layout else "",
             "town": town.group(1).strip() if town else f["town"], "url": SITE + (cs.group(1) if cs else en.group(1) if en else ""),
-            "images": [base % (i, 0) for i in imgs[:12]], "image_base": [(base, i) for i in imgs[:12]], "warnings": warn}
+            "images": [base % (i, 0) for i in imgs[:20]], "image_base": [(base, i) for i in imgs[:20]], "warnings": warn}
 
 
 def fetch_photos(f):
@@ -172,6 +172,33 @@ def fetch_photos(f):
         im.save(j, quality=95)
         out.append(j)
     return out
+
+
+def rank_photos(photos):
+    """free AI model picks the strongest shots and leaves out bathrooms, corridors and floor plans."""
+    try:
+        import torch
+        from transformers import CLIPModel, CLIPProcessor
+        hero = ["a sea view from a balcony", "a sunny terrace with a view", "a swimming pool at a residence"]
+        good = ["a bright modern living room", "a modern kitchen", "a cozy bedroom", "a modern apartment building exterior"]
+        bad = ["a bathroom with a toilet and a shower", "a narrow dark hallway", "a floor plan drawing", "a stairwell", "a messy unfinished room"]
+        name = "openai/clip-vit-base-patch32"
+        model, proc = CLIPModel.from_pretrained(name), CLIPProcessor.from_pretrained(name)
+        ims = [Image.open(p).convert("RGB") for p in photos]
+        inp = proc(text=hero + good + bad, images=ims, return_tensors="pt", padding=True)
+        with torch.no_grad():
+            pr = model(**inp).logits_per_image.softmax(dim=1).numpy()
+        ok = pr[:, :len(hero) + len(good)].sum(1)
+        keep = [i for i in np.argsort(-ok) if ok[i] >= 0.5]
+        if len(keep) < 4:
+            keep = [int(i) for i in np.argsort(-ok)[:4]]
+        top = max(keep, key=lambda i: pr[i, :len(hero)].sum())
+        keep = [top] + [i for i in keep if i != top]
+        log("photos kept %d of %d" % (len(keep), len(photos)))
+        return [photos[i] for i in keep]
+    except Exception as e:
+        log("photo ranking skipped:", e)
+        return photos
 
 
 # ---------------------------------------------------------------- graphics
@@ -363,7 +390,8 @@ def beach_clip(path, queries):
                     return {"path": path, "source": v.get("url"), "license": "Pexels License"}
         if key:
             r = requests.get("https://pixabay.com/api/videos/", params={"key": key, "q": q, "per_page": 60, "safesearch": "true"}, timeout=30).json()
-            hits = [h for h in r.get("hits", []) if h.get("duration", 0) >= 5 and h["id"] not in _USED]
+            hits = [h for h in r.get("hits", []) if h.get("duration", 0) >= 5 and h["id"] not in _USED
+                    and not re.search(r"\b(ai|generated|maldives|tropical|island|palm)\b", h.get("tags", ""), re.I)]
             random.shuffle(hits)
             hits.sort(key=lambda h: h["videos"].get("large", {}).get("height", 0) > h["videos"].get("large", {}).get("width", 1), reverse=True)
             for h in hits:
@@ -473,7 +501,8 @@ def captions(f, lang):
         tag = "#" + re.sub(r"[^a-z0-9]", "", f["town"].lower())
         tags = [tag, "#albanie" if lg != "en" else "#albania", "#buyalbania", "#albanianriviera", "#nemovitostiumore" if lg != "en" else "#seasideproperty",
                 "#apartmanumore" if lg != "en" else "#apartmentbythesea", "#realestate", "#luxuryrealestate", "#investice" if lg != "en" else "#investment"]
-        ls = [t["ig"], "", f["title"], "💶 %s: %s" % (t["lp"], f["price"])]
+        name = re.sub(r",?\s*\d+\s*m²", "", f["title"]) if f["warnings"] else f["title"]
+        ls = [t["ig"], "", name, "💶 %s: %s" % (t["lp"], f["price"])]
         if f["layout"]:
             ls.append("🛏 %s: %s" % (t["ll"], f["layout"]))
         if f["area"]:
@@ -506,7 +535,7 @@ def build(f, opts):
     stamp = datetime.now(ZoneInfo("Europe/Prague")).strftime("%Y%m%d-%H%M")
     out_dir = "out/%s-%s" % (f["id"], stamp)
     os.makedirs(out_dir, exist_ok=True)
-    photos = fetch_photos(f)
+    photos = rank_photos(fetch_photos(f))
     if len(photos) < 4:
         sys.exit("Property %s has only %d usable photos" % (f["id"], len(photos)))
     style = choose_style(f, opts["style"])
@@ -524,9 +553,9 @@ def build(f, opts):
         if c:
             sources.append({"source": c["source"], "license": c["license"]})
         return c
-    b_hook = beach("b_hook", ["mediterranean beach aerial", "turquoise sea beach drone", "sea waves beach aerial"])
-    b_mid = beach("b_mid", ["beach walk sunset", "beach waves slow motion", "turquoise sea beach"])
-    b_end = beach("b_end", ["sunset beach sea", "sea sunset drone", "beach sunset waves"])
+    b_hook = beach("b_hook", ["albania coast", "albania beach", "adriatic sea coast", "mediterranean coast drone"])
+    b_mid = beach("b_mid", ["albania beach", "mediterranean beach", "adriatic beach", "beach waves slow motion"])
+    b_end = beach("b_end", ["mediterranean sunset sea", "adriatic sunset", "beach sunset waves"])
 
     body, i = [], 2
     for n in range(4):  # the property
