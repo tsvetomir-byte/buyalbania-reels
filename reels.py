@@ -48,8 +48,7 @@ PERKS = [
 HOOKS_MORNING = ["Wake up to THIS view", "Your sea-view home in Albania", "Coffee with a sea view?", "Seaside living in Albania"]
 HOOKS_EVENING = ["Sunsets like this, every day", "Your own place by the sea", "Tonight's seaside pick", "Still renting your holidays?"]
 # Kevin MacLeod (incompetech.com) - Licensed under Creative Commons: By Attribution 4.0
-MUSIC = ["Inspired", "Wholesome", "Cool Vibes", "Bossa Antigua", "Airport Lounge", "Backbay Lounge",
-         "Easy Lemon", "Feelin Good", "Fresh Air", "Beachfront Celebration"]
+MUSIC = ["Airport Lounge", "Backbay Lounge", "Bossa Antigua", "Cool Vibes"]
 STOCK_QUERIES = ["albania beach", "mediterranean beach aerial", "turquoise sea beach", "sea waves beach aerial", "sandy beach drone"]
 STOCK_MID = ["beach walk sunset", "turquoise sea beach", "beach waves slow motion", "drone coastline", "mediterranean beach aerial", "sandy beach drone"]
 STOCK_END = ["sunset beach", "sea drone", "couple beach sunset", "beach waves slow motion"]
